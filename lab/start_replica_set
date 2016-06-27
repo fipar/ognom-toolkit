@@ -21,6 +21,10 @@ msg "Adding secondaries"
 h=$(hostname)
 mongo --port ${port_prefix}1 --eval "for (i=2; i<=4; i++) {rs.add(\"${h}:2700\"+i)}"
 
-msg "Waiting one second before attempting to print status"
+msg "Waiting one second before attempting to identify PRIMARY"
 sleep 1
-mongo --port ${port_prefix}1 --eval "printjson(rs.status())"
+
+primary_port=$(identify_primary)
+primary_pid=$(ps -ef|grep mongod|grep $primary_port|awk '{print $2}')
+
+msg "Primary pid is $primary_pid"

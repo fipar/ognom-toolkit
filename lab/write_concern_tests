@@ -1,0 +1,56 @@
+#!/bin/bash 
+
+. common.sh
+
+# do_inserts <mongo-port> <write-concern>
+do_inserts()
+{
+    cat <<EOF>do_inserts.js
+i=0
+try {
+    for (;;i++) {
+    db.test.insert({_id:i}, {writeConcern: $2})
+    }
+} catch (err) {
+    print("last inserted value: " + i)
+}
+
+EOF
+    grep writeConcern do_inserts.js
+    mongo --port $1 test do_inserts.js | grep 'last inserted value' 
+}
+
+echo "standalone tests"
+for w in 0 1 '"majority"'; do
+    for j in 0 1; do
+	./stop_all_mongo &>/dev/null
+	rm -rf mongod_*
+	./start_single
+	do_inserts 27017 "{w:$w, j:$j}" &
+	sleep 5.3
+	kill -9 $(pidof mongod)
+        ./start_single noinit
+	mongo --port 27017 --eval "printjson(db.test.find().sort({_id:-1}).limit(1).next())" test
+    done
+done
+
+rm -f do_inserts.js
+
+echo "replica set tests"
+for w in 0 1 '"majority"'; do
+    for j in 0 1; do
+	./stop_all_mongo &>/dev/null
+	rm -rf mongod_rsTest*
+	primary_pid=$(./start_replica_set 2>&1|tail -1|awk '{print $4}')
+	primary_port=$(identify_primary)
+	wait_for_at_least_one_secondary $primary_port
+	do_inserts $primary_port "{w:$w, j:$j}" &
+	sleep 5.3
+	kill -9 $primary_pid
+	sleep 20 # wait for the set to reconfigure itself
+        primary_port=$(identify_primary $((primary_port - 27000 + 2)))
+ 	echo "verification"
+	mongo --port $primary_port --eval "printjson(db.test.find().sort({_id:-1}).limit(1).next())" test
+    done	
+done
+

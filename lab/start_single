@@ -2,5 +2,5 @@
 
 . common.sh
 
-init_dbpath $PWD/mongod_single
+[ $# -eq 0 ] && init_dbpath $PWD/mongod_single
 start_mongod $PWD/mongod_single 27017

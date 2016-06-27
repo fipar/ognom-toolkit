@@ -60,3 +60,34 @@ EOF
     }
     kill $(cat $1/mongod.pid)
 }
+
+identify_primary()
+{
+    cnt=0
+    max_cnt=60
+    port_prefix=2700
+    port_suffix=1
+    [ -n "$1" ] && port_suffix=$1
+    primary_port=$(mongo --port ${port_prefix}${port_suffix} --eval "printjson(rs.status())"|grep --before-context 3 PRIMARY|head -1|awk -F: '{print $3}'|tr -d '",')
+    while [ -z "$primary_port" -o $(echo $primary_port|grep -c 2700) -eq 0 ]; do
+	sleep 1
+	port_suffix=$((port_suffix+1))
+	[ $port_suffix -ge 5 ] && port_suffix=1
+	cnt=$((cnt+1))
+	[ $cnt -ge $max_cnt ] && echo "Could not identify PRIMARY in less than $max_cnt seconds">&2 && return 1
+	primary_port=$(mongo --port ${port_prefix}${port_suffix} --eval "printjson(rs.status())"|grep --before-context 3 PRIMARY|head -1|awk -F: '{print $3}'|tr -d '",')
+    done
+    echo $primary_port
+}
+
+wait_for_at_least_one_secondary()
+{
+    cnt=0
+    max_cnt=60
+    secondary_count=$(mongo --port $1 --eval "rs.status()"|grep -c SECONDARY)
+    while [ $secondary_count -eq 0 ]; do
+	sleep 1
+	[ $cnt -ge $max_cnt ] && echo "Could not identify a SECONDARY in less than $max_cnt seconds">&2 && return 1
+	secondary_count=$(mongo --port $1 --eval "printjson(rs.status())"|grep -c SECONDARY)
+    done
+}
