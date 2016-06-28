@@ -3,6 +3,12 @@
 . common.sh
 
 # do_inserts <mongo-port> <write-concern>
+# creates a js script that inserts sequentially in a loop, with
+# the given write-concern.
+# when mongod gets the SIGKILL, it will print the iterator value at the time.
+# note that while the message says "last inserted value", it is possible SIGKILL is received after the for
+# condition gets evaluated for this iteration, but before the body gets to execute. In that case, the insert will fail,
+# and the printed value will be one more than the highest value on the db. I am not counting that as an error/lost document. 
 do_inserts()
 {
     cat <<EOF>do_inserts.js
